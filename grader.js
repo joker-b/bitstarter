@@ -24,8 +24,11 @@ References:
 var fs = require('fs');
 var program = require('commander');
 var cheerio = require('cheerio');
+var sys = require('util');
+var rest = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
+var URL_DEFAULT = "http://polar-wildwood-8616.herokuapp.com";
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
@@ -36,15 +39,28 @@ var assertFileExists = function(infile) {
     return instr;
 };
 
+/// to-do actually do some checking
+var assertUrlExists = function(inurl) {
+    var instr = inurl.toString();
+    if ((instr.length < 1) || (instr == '-')) {
+	instr = URL_DEFAULT;
+    }
+//    if(!fs.existsSync(instr)) {
+//        console.log("%s does not exist. Exiting.", instr);
+//        process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
+//    }
+    return instr;
+};
+
 var cheerioHtmlFile = function(htmlfile) {
     return cheerio.load(fs.readFileSync(htmlfile));
-};
+}
 
 var loadChecks = function(checksfile) {
     return JSON.parse(fs.readFileSync(checksfile));
 };
 
-var checkHtmlFile = function(htmlfile, checksfile) {
+var checkHtmlFile = function(htmlfile, url, checksfile) {
     $ = cheerioHtmlFile(htmlfile);
     var checks = loadChecks(checksfile).sort();
     var out = {};
@@ -65,10 +81,24 @@ if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <path>', 'Path to any URL', clone(assertUrlExists), '')
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+    var url = program.url;
+    if (url == '') {
+	url = 'file://'+program.file;
+    }
+    // console.log('// '+url);
+    rest.get(url).on('complete', function(result,response) {
+	$ = cheerio.load(result);
+	var checks = loadChecks(program.checks).sort();
+	var checkJson = {};
+	for(var ii in checks) {
+	    var present = $(checks[ii]).length > 0;
+	    checkJson[checks[ii]] = present;
+	}
+	var outJson = JSON.stringify(checkJson, null, 4);
+	console.log(outJson);
+    });
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
